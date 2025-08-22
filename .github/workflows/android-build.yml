@@ -1,7 +1,7 @@
 name: Build Luanti Android (with CSM)
 
 on:
-  workflow_dispatch:
+  workflow_dispatch:   # Permite ejecutar manualmente
   push:
     branches: [ master ]
   pull_request:
@@ -18,65 +18,31 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt update
-          sudo apt install -y cmake ninja-build openjdk-17-jdk unzip git
-
-      - name: Setup Android NDK & SDK
-        uses: android-actions/setup-android@v3
-        with:
-          ndk-version: 26.1.10909125
-          cmake-version: 3.22.1
+          sudo apt install -y openjdk-17-jdk unzip git
 
       - name: Enable CSM in settings
         run: |
-          sed -i 's/enable_client_modding", "false"/enable_client_modding", "true"/' src/defaultsettings.cpp
+          sed -i 's/enable_client_modding.*false/enable_client_modding", "true"/' src/defaultsettings.cpp || true
           echo "enable_client_modding = true" >> minetest.conf.example
 
-      - name: Configure (armeabi-v7a - 32bit)
+      - name: Build APK (armeabi-v7a - 32bit)
         run: |
-          mkdir -p build-android-32 && cd build-android-32
-          cmake ../ \
-            -G Ninja \
-            -DCMAKE_SYSTEM_NAME=Android \
-            -DCMAKE_SYSTEM_VERSION=24 \
-            -DANDROID_ABI=armeabi-v7a \
-            -DANDROID_NDK=$ANDROID_NDK_HOME \
-            -DANDROID_TOOLCHAIN=clang \
-            -DBUILD_CLIENT=1 \
-            -DBUILD_SERVER=0 \
-            -DRUN_IN_PLACE=TRUE
-
-      - name: Build (armeabi-v7a)
-        run: |
-          cd build-android-32
-          ninja
-          cd ..
+          cd build/android
+          ./gradlew assembleDebug -PABI_FILTERS=armeabi-v7a
+          cd ../..
           mkdir -p artifacts
-          cp build-android-32/bin/*.apk artifacts/minetest-android-32bit.apk || true
+          cp build/android/app/build/outputs/apk/debug/app-armeabi-v7a-debug.apk artifacts/minetest-android-32bit.apk || true
 
-      - name: Configure (arm64-v8a - 64bit)
+      - name: Build APK (arm64-v8a - 64bit)
         run: |
-          mkdir -p build-android-64 && cd build-android-64
-          cmake ../ \
-            -G Ninja \
-            -DCMAKE_SYSTEM_NAME=Android \
-            -DCMAKE_SYSTEM_VERSION=24 \
-            -DANDROID_ABI=arm64-v8a \
-            -DANDROID_NDK=$ANDROID_NDK_HOME \
-            -DANDROID_TOOLCHAIN=clang \
-            -DBUILD_CLIENT=1 \
-            -DBUILD_SERVER=0 \
-            -DRUN_IN_PLACE=TRUE
-
-      - name: Build (arm64-v8a)
-        run: |
-          cd build-android-64
-          ninja
-          cd ..
+          cd build/android
+          ./gradlew assembleDebug -PABI_FILTERS=arm64-v8a
+          cd ../..
           mkdir -p artifacts
-          cp build-android-64/bin/*.apk artifacts/minetest-android-64bit.apk || true
+          cp build/android/app/build/outputs/apk/debug/app-arm64-v8a-debug.apk artifacts/minetest-android-64bit.apk || true
 
       - name: Upload APKs
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v3
         with:
           name: luanti-apks
           path: artifacts/*.apk
