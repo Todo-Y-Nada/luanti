@@ -1,18 +1,82 @@
-- name: Decode keystore
-        if: secrets.KEYSTORE_BASE64 != ''
-        run: |
-          echo "$KEYSTORE_BASE64" | base64 -d > mykey.keystore
+name: Build Luanti Android (with CSM)
 
-      - name: Sign 32-bit APK
-        if: secrets.KEYSTORE_BASE64 != ''
-        run: |
-          apksigner sign --ks mykey.keystore --ks-key-alias "$KEY_ALIAS" \
-            --ks-pass pass:"$KEYSTORE_PASSWORD" --key-pass pass:"$KEY_PASSWORD" \
-            artifacts/minetest-android-32bit.apk
+on:
+  workflow_dispatch:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
 
-      - name: Sign 64-bit APK
-        if: secrets.KEYSTORE_BASE64 != ''
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v3
+
+      - name: Install dependencies
         run: |
-          apksigner sign --ks mykey.keystore --ks-key-alias "$KEY_ALIAS" \
-            --ks-pass pass:"$KEYSTORE_PASSWORD" --key-pass pass:"$KEY_PASSWORD" \
-            artifacts/minetest-android-64bit.apk
+          sudo apt update
+          sudo apt install -y cmake ninja-build openjdk-17-jdk unzip git
+
+      - name: Setup Android NDK & SDK
+        uses: android-actions/setup-android@v3
+        with:
+          ndk-version: 26.1.10909125
+          cmake-version: 3.22.1
+
+      - name: Enable CSM in settings
+        run: |
+          sed -i 's/enable_client_modding", "false"/enable_client_modding", "true"/' src/defaultsettings.cpp
+          echo "enable_client_modding = true" >> minetest.conf.example
+
+      - name: Configure (armeabi-v7a - 32bit)
+        run: |
+          mkdir -p build-android-32 && cd build-android-32
+          cmake ../ \
+            -G Ninja \
+            -DCMAKE_SYSTEM_NAME=Android \
+            -DCMAKE_SYSTEM_VERSION=24 \
+            -DANDROID_ABI=armeabi-v7a \
+            -DANDROID_NDK=$ANDROID_NDK_HOME \
+            -DANDROID_TOOLCHAIN=clang \
+            -DBUILD_CLIENT=1 \
+            -DBUILD_SERVER=0 \
+            -DRUN_IN_PLACE=TRUE
+
+      - name: Build (armeabi-v7a)
+        run: |
+          cd build-android-32
+          ninja
+          cd ..
+          mkdir -p artifacts
+          cp build-android-32/bin/*.apk artifacts/minetest-android-32bit.apk || true
+
+      - name: Configure (arm64-v8a - 64bit)
+        run: |
+          mkdir -p build-android-64 && cd build-android-64
+          cmake ../ \
+            -G Ninja \
+            -DCMAKE_SYSTEM_NAME=Android \
+            -DCMAKE_SYSTEM_VERSION=24 \
+            -DANDROID_ABI=arm64-v8a \
+            -DANDROID_NDK=$ANDROID_NDK_HOME \
+            -DANDROID_TOOLCHAIN=clang \
+            -DBUILD_CLIENT=1 \
+            -DBUILD_SERVER=0 \
+            -DRUN_IN_PLACE=TRUE
+
+      - name: Build (arm64-v8a)
+        run: |
+          cd build-android-64
+          ninja
+          cd ..
+          mkdir -p artifacts
+          cp build-android-64/bin/*.apk artifacts/minetest-android-64bit.apk || true
+
+      - name: Upload APKs
+        uses: actions/upload-artifact@v4
+        with:
+          name: luanti-apks
+          path: artifacts/*.apk
