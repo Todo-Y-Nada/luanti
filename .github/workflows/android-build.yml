@@ -1,0 +1,18 @@
+- name: Decode keystore
+        if: secrets.KEYSTORE_BASE64 != ''
+        run: |
+          echo "$KEYSTORE_BASE64" | base64 -d > mykey.keystore
+
+      - name: Sign 32-bit APK
+        if: secrets.KEYSTORE_BASE64 != ''
+        run: |
+          apksigner sign --ks mykey.keystore --ks-key-alias "$KEY_ALIAS" \
+            --ks-pass pass:"$KEYSTORE_PASSWORD" --key-pass pass:"$KEY_PASSWORD" \
+            artifacts/minetest-android-32bit.apk
+
+      - name: Sign 64-bit APK
+        if: secrets.KEYSTORE_BASE64 != ''
+        run: |
+          apksigner sign --ks mykey.keystore --ks-key-alias "$KEY_ALIAS" \
+            --ks-pass pass:"$KEYSTORE_PASSWORD" --key-pass pass:"$KEY_PASSWORD" \
+            artifacts/minetest-android-64bit.apk
